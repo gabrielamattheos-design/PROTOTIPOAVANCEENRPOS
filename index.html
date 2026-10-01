@@ -9800,16 +9800,16 @@ body.venta-rapida-producto-activa #backIcon::before{
   const $ = id => document.getElementById(id);
   const moneySeguro = n => '$' + Math.round(Number(n)||0).toLocaleString('es-CL');
 
-  /* Valores referenciales para el prototipo.
-     Cesantía: 0,60% del monto.
-     Hospitalización: 0,35% del monto.
+  /* Valores de seguros opcionales.
+     Cesantía: 6% del monto.
+     Hospitalización: 6% del monto.
      Se recalculan automáticamente si cambia el monto solicitado. */
   function insuranceValues(){
     const monto = Number(data.monto) || 0;
     return {
       desgravamen: Math.round(monto * 0.04),
-      cesantia: Math.round(monto * 0.006),
-      hospitalizacion: Math.round(monto * 0.0035)
+      cesantia: Math.round(monto * 0.06),
+      hospitalizacion: Math.round(monto * 0.06)
     };
   }
 
@@ -9879,20 +9879,30 @@ body.venta-rapida-producto-activa #backIcon::before{
   }
 
   function patchTerms(){
-    /* En Términos y condiciones siempre existe un único check de seguro.
-       El documento "Ver condiciones del seguro" contempla todas las pólizas. */
-    const seguro=$('chkCondSeguro');
-    if(seguro){
-      const row=seguro.closest('.term-row');
-      if(row) row.style.display='';
+    const card=document.querySelector('#step16 .terms-card');
+    if(!card) return;
+
+    if(!$('termCesantia')){
+      const row=document.createElement('label');
+      row.id='termCesantia';
+      row.className='term-row optional-term-row';
+      row.innerHTML='<input id="chkCondCesantia" type="checkbox"><span><b>El cliente ha leído y aceptado las condiciones del Seguro de Cesantía</b><a href="javascript:void(0)">Ver condiciones del Seguro de Cesantía</a></span>';
+      card.appendChild(row);
+      row.querySelector('a').onclick=function(e){e.preventDefault();e.stopPropagation();alert('Condiciones Seguro de Cesantía\\n\\nSeguro opcional asociado al Avance. Para el prototipo, su prima se calcula de forma referencial según el monto solicitado.');};
+      row.querySelector('input').onchange=function(){toggleConsentButton();};
+    }
+    if(!$('termHospitalizacion')){
+      const row=document.createElement('label');
+      row.id='termHospitalizacion';
+      row.className='term-row optional-term-row';
+      row.innerHTML='<input id="chkCondHospitalizacion" type="checkbox"><span><b>El cliente ha leído y aceptado las condiciones del Seguro de Hospitalización</b><a href="javascript:void(0)">Ver condiciones del Seguro de Hospitalización</a></span>';
+      card.appendChild(row);
+      row.querySelector('a').onclick=function(e){e.preventDefault();e.stopPropagation();alert('Condiciones Seguro de Hospitalización\\n\\nSeguro opcional del prototipo. Su prima se calcula de forma referencial según el monto solicitado.');};
+      row.querySelector('input').onchange=function(){toggleConsentButton();};
     }
 
-    /* Por compatibilidad con versiones anteriores, elimina filas específicas
-       de Cesantía/Hospitalización si hubieran sido creadas. */
-    const termCesantia=$('termCesantia');
-    const termHospitalizacion=$('termHospitalizacion');
-    if(termCesantia) termCesantia.remove();
-    if(termHospitalizacion) termHospitalizacion.remove();
+    $('termCesantia').classList.toggle('show', !!data.segCesantia);
+    $('termHospitalizacion').classList.toggle('show', !!data.segHospitalizacion);
   }
 
   function patchReceipt(){
@@ -9940,8 +9950,9 @@ body.venta-rapida-producto-activa #backIcon::before{
     if($('destValorCuota')) $('destValorCuota').textContent=moneySeguro(cuotaAjustada);
     if($('authCuotaNew')) $('authCuotaNew').textContent=moneySeguro(cuotaAjustada);
 
-    /* Términos: siempre se usa un único check general de condiciones del seguro */
-    patchTerms();
+    /* Términos opcionales sólo si el seguro fue seleccionado */
+    if($('termCesantia')) $('termCesantia').classList.toggle('show', !!data.segCesantia);
+    if($('termHospitalizacion')) $('termHospitalizacion').classList.toggle('show', !!data.segHospitalizacion);
 
     /* Comprobante: sólo aparecen los seguros efectivamente contratados */
     if($('receiptCesantiaRow')){
@@ -9957,14 +9968,18 @@ body.venta-rapida-producto-activa #backIcon::before{
     toggleConsentButton();
   }
 
-  /* Condiciones: siempre se exige Avance + un único check general del seguro */
+  /* Condiciones: las opcionales se exigen sólo cuando fueron contratadas */
   const oldToggleConsent = window.toggleConsentButton;
   window.toggleConsentButton=function(){
     const avance=$('chkCondAvance');
     const seguro=$('chkCondSeguro');
+    const ces=$('chkCondCesantia');
+    const hos=$('chkCondHospitalizacion');
     const btn=$('btnAcceptConditions');
     if(!btn) return;
-    const ok=!!(avance && seguro && avance.checked && seguro.checked);
+    let ok=!!(avance && seguro && avance.checked && seguro.checked);
+    if(data.segCesantia) ok=ok && !!(ces && ces.checked);
+    if(data.segHospitalizacion) ok=ok && !!(hos && hos.checked);
     btn.disabled=!ok;
   };
 
@@ -10137,3 +10152,984 @@ body.venta-rapida-producto-activa #backIcon::before{
 
 </body>
 </html>
+
+<!-- UX FIX DEFINITIVO: STEP 3 CUOTAS SUGERIDAS -->
+<style id="ux-step3-final-clean">
+/* STEP 3 completo en una sola vista, sin scroll */
+#mainContent.offer-step3-mode{
+  overflow:hidden !important;
+  padding:4px 4px 5px !important;
+  scrollbar-width:none !important;
+}
+#mainContent.offer-step3-mode::-webkit-scrollbar{display:none!important;}
+
+#step3.active{
+  display:block !important;
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+  padding:0 !important;
+  overflow:hidden !important;
+}
+
+#step3 .offer-new-card{
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+  margin:0 !important;
+  padding:6px 7px 7px !important;
+  overflow:hidden !important;
+  display:flex !important;
+  flex-direction:column !important;
+  border-radius:10px !important;
+}
+
+/* Cabecera compacta para ganar espacio sin cambiar contenido */
+#step3 .offer-icon{
+  flex:0 0 auto !important;
+  width:52px !important;
+  height:52px !important;
+  margin:0 auto 2px !important;
+  font-size:7px !important;
+}
+#step3 .offer-icon .coin{
+  width:32px !important;
+  height:32px !important;
+  border-width:3px !important;
+  font-size:20px !important;
+}
+#step3 .offer-head{
+  flex:0 0 auto !important;
+  font-size:12px !important;
+  line-height:1.1 !important;
+  margin:0 auto !important;
+  max-width:230px !important;
+}
+#step3 .offer-money{
+  flex:0 0 auto !important;
+  font-size:25px !important;
+  line-height:1 !important;
+  margin:3px 0 6px !important;
+}
+
+/* Cada tarjeta usa exactamente 3 columnas de información + flecha */
+#step3 .quota-option{
+  flex:0 0 70px !important;
+  width:100% !important;
+  min-height:70px !important;
+  height:70px !important;
+  margin:3px 0 !important;
+  padding:7px 4px 5px !important;
+  display:grid !important;
+  grid-template-columns:54px minmax(82px,1fr) 72px 8px !important;
+  column-gap:2px !important;
+  align-items:start !important;
+  overflow:hidden !important;
+  border-radius:8px !important;
+}
+
+/* CUOTAS: sin duplicar texto.
+   El HTML original ya contiene número + <small>cuotas</small>.
+   Se usa el small como encabezado visual, moviéndolo arriba. */
+#step3 .quota-option .q{
+  min-width:0 !important;
+  height:56px !important;
+  padding:0 !important;
+  margin:0 !important;
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:center !important;
+  justify-content:flex-start !important;
+  font-size:22px !important;
+  line-height:22px !important;
+  text-align:center !important;
+  overflow:hidden !important;
+}
+#step3 .quota-option .q small{
+  order:-1 !important;
+  display:block !important;
+  width:100% !important;
+  height:11px !important;
+  margin:0 0 4px !important;
+  font-size:7.5px !important;
+  line-height:11px !important;
+  font-weight:400 !important;
+  text-transform:none !important;
+}
+
+/* Encabezados alineados exactamente arriba */
+#step3 .quota-option .payment,
+#step3 .quota-option .rate{
+  min-width:0 !important;
+  height:56px !important;
+  margin:0 !important;
+  padding:0 2px !important;
+  font-size:7.5px !important;
+  line-height:11px !important;
+  text-align:center !important;
+  overflow:hidden !important;
+  border-left:1px solid #ded9e8 !important;
+}
+
+/* Valores alineados en la segunda línea */
+#step3 .quota-option .payment b,
+#step3 .quota-option .rate b{
+  display:block !important;
+  margin:4px 0 0 !important;
+  white-space:nowrap !important;
+  line-height:22px !important;
+}
+#step3 .quota-option .payment b{
+  font-size:16px !important;
+}
+#step3 .quota-option .rate b{
+  font-size:14px !important;
+}
+
+/* Descuento dentro de la columna, nunca fuera */
+#step3 .quota-option .rate em{
+  display:block !important;
+  width:max-content !important;
+  max-width:100% !important;
+  margin:1px auto 0 !important;
+  padding:1px 3px !important;
+  font-size:6.5px !important;
+  line-height:9px !important;
+  white-space:nowrap !important;
+  overflow:hidden !important;
+}
+
+/* Flecha centrada y contenida */
+#step3 .quota-option .arr{
+  align-self:center !important;
+  min-width:0 !important;
+  margin:0 !important;
+  font-size:16px !important;
+  line-height:1 !important;
+}
+
+/* Ambos botones visibles en la misma pantalla */
+#step3 .offer-actions{
+  flex:0 0 auto !important;
+  display:grid !important;
+  gap:5px !important;
+  margin:5px 0 0 !important;
+}
+#step3 .offer-actions .new-btn{
+  width:100% !important;
+  height:34px !important;
+  min-height:34px !important;
+  margin:0 !important;
+  padding:0 8px !important;
+  font-size:11px !important;
+  line-height:34px !important;
+}
+#step3 .offer-new-card::after{display:none!important;}
+</style>
+
+<script id="ux-step3-final-clean-script">
+(function(){
+  function cleanStep3(){
+    /* Elimina restos de parches previos si el navegador reutiliza nodos */
+    document.querySelectorAll('#step3 .q-number-final').forEach(function(n){
+      var q=n.parentElement;
+      if(q){
+        var val=n.textContent;
+        n.remove();
+        var hasText=false;
+        for(var i=0;i<q.childNodes.length;i++){
+          var x=q.childNodes[i];
+          if(x.nodeType===3 && x.nodeValue.trim()){hasText=true;break;}
+        }
+        if(!hasText) q.insertBefore(document.createTextNode(val), q.firstChild);
+      }
+    });
+  }
+  cleanStep3();
+  document.addEventListener('DOMContentLoaded',cleanStep3);
+})();
+</script>
+
+
+<!-- AJUSTE FINAL SOLO BOTONES / FIT VERTICAL STEP 3 -->
+<style id="step3-buttons-fullwidth-fit-final">
+/* Recuperar espacio vertical sin tocar alineación ni contenido de las cuotas */
+#step3 .offer-icon{
+  width:46px !important;
+  height:46px !important;
+  margin-bottom:1px !important;
+}
+#step3 .offer-icon .coin{
+  width:29px !important;
+  height:29px !important;
+  font-size:18px !important;
+}
+#step3 .offer-head{
+  font-size:11.5px !important;
+  line-height:1.05 !important;
+}
+#step3 .offer-money{
+  font-size:24px !important;
+  margin:2px 0 4px !important;
+}
+
+/* Reducir solo espacios/alto externo de las tarjetas, no tipografías ni alineación */
+#step3 .quota-option{
+  flex-basis:66px !important;
+  height:66px !important;
+  min-height:66px !important;
+  margin:2px 0 !important;
+  padding-top:6px !important;
+  padding-bottom:4px !important;
+}
+
+/* Botones como en el resto del flujo: largos, ancho completo */
+#step3 .offer-actions{
+  width:100% !important;
+  margin:5px 0 0 !important;
+  gap:5px !important;
+}
+#step3 .offer-actions .new-btn{
+  width:100% !important;
+  max-width:none !important;
+  min-width:100% !important;
+  height:36px !important;
+  min-height:36px !important;
+  display:block !important;
+  margin:0 !important;
+  padding:0 10px !important;
+  line-height:36px !important;
+  font-size:11px !important;
+  box-sizing:border-box !important;
+}
+
+/* Asegurar que ambos botones queden dentro del viewport del POS */
+#step3 .offer-new-card{
+  padding-bottom:6px !important;
+}
+</style>
+
+
+<!-- AJUSTE UX SIMULAR AVANCE: RESUMEN FINANCIERO -->
+<style id="ux-step5-finance-final">
+/* Dos cuadros equivalentes y perfectamente alineados */
+#step5 .finance-box{
+  box-sizing:border-box !important;
+}
+#step5 .finance-top{
+  display:grid !important;
+  grid-template-columns:1fr 1fr !important;
+  align-items:stretch !important;
+  gap:0 !important;
+}
+#step5 .finance-top > div{
+  min-width:0 !important;
+  min-height:66px !important;
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:center !important;
+  justify-content:flex-start !important;
+  text-align:center !important;
+  padding:8px 6px 6px !important;
+  box-sizing:border-box !important;
+}
+#step5 .finance-top > div + div{
+  border-left:1px solid #ded9e8 !important;
+}
+
+/* Ambos títulos parten exactamente a la misma altura */
+#step5 .finance-top > div > span:first-child{
+  display:block !important;
+  width:100% !important;
+  margin:0 0 5px !important;
+  font-size:11px !important;
+  line-height:13px !important;
+  min-height:13px !important;
+}
+
+/* Valor cuota y tasa: mismo tamaño y misma línea visual */
+#step5 #cuotaTxt,
+#step5 #rateNew{
+  display:block !important;
+  width:100% !important;
+  margin:0 !important;
+  font-size:22px !important;
+  line-height:25px !important;
+  font-weight:700 !important;
+  white-space:nowrap !important;
+  text-align:center !important;
+}
+#step5 .discount-chip{
+  margin-top:3px !important;
+}
+
+/* Primer pago / Costo total / CAE más grandes y legibles */
+#step5 .finance-bottom{
+  font-size:12.5px !important;
+  line-height:1.55 !important;
+  text-align:center !important;
+  padding:7px 5px !important;
+}
+#step5 .finance-bottom b{
+  font-size:13px !important;
+  font-weight:700 !important;
+}
+</style>
+
+
+<!-- CORRECCION FINAL SIMULAR AVANCE: BOTONES VISIBLES + DESGRAVAMEN $80.000 -->
+<style id="step5-fit-actions-desgravamen-final">
+/* Pantalla completa y compacta, reservando espacio real para los botones */
+#step5.active{
+  height:100% !important;
+  min-height:0 !important;
+  overflow:hidden !important;
+  display:flex !important;
+  flex-direction:column !important;
+  padding-bottom:4px !important;
+}
+#mainContent:has(#step5.active){
+  overflow:hidden !important;
+}
+
+/* El formulario ocupa solo el espacio necesario */
+#step5 .new-progress{
+  flex:0 0 auto !important;
+  margin-bottom:3px !important;
+}
+#step5 .sim-form-card{
+  flex:0 1 auto !important;
+  padding:6px 7px !important;
+  margin:0 0 4px !important;
+}
+#step5 .sim-lbl{
+  margin-bottom:2px !important;
+  line-height:1 !important;
+}
+#step5 .sim-lbl[style]{
+  margin-top:6px !important;
+}
+#step5 .input-display,
+#step5 .sim-select{
+  height:34px !important;
+  min-height:34px !important;
+}
+#step5 .insurance-bar{
+  min-height:31px !important;
+  margin-top:3px !important;
+  padding-top:4px !important;
+  padding-bottom:4px !important;
+}
+#step5 .finance-top > div{
+  min-height:54px !important;
+  padding:5px 5px 3px !important;
+}
+#step5 .finance-bottom{
+  padding:4px 4px !important;
+  line-height:1.25 !important;
+}
+
+/* Reservar siempre el bloque inferior para Continuar y Volver */
+#step5 .sim-actions{
+  flex:0 0 auto !important;
+  width:100% !important;
+  display:grid !important;
+  gap:5px !important;
+  margin:0 !important;
+  padding:0 !important;
+  position:relative !important;
+  visibility:visible !important;
+  opacity:1 !important;
+}
+#step5 .sim-actions .new-btn{
+  display:block !important;
+  visibility:visible !important;
+  opacity:1 !important;
+  width:100% !important;
+  height:35px !important;
+  min-height:35px !important;
+  margin:0 !important;
+  line-height:35px !important;
+}
+
+/* Desgravamen: una sola etiqueta + valor visible.
+   Ocultamos SOLO la etiqueta duplicada creada por el parche de seguros. */
+#step5 .required-insurance .insurance-copy .insurance-name{
+  display:none !important;
+}
+#step5 .required-insurance .insurance-copy{
+  display:inline-flex !important;
+  align-items:center !important;
+  margin-left:auto !important;
+}
+#step5 .required-insurance .insurance-value{
+  display:inline-block !important;
+  font-weight:700 !important;
+  white-space:nowrap !important;
+}
+#step5 .required-insurance #insurancePrice{
+  display:none !important;
+}
+</style>
+
+
+<!-- AJUSTE FINAL STEP 5: BOTONES COMPLETOS + CAE EN LINEA INFERIOR -->
+<style id="step5-final-fit-cae-actions">
+/* Ganar el espacio mínimo necesario sin cambiar tamaños importantes */
+#step5 .sim-form-card{
+  padding-top:5px !important;
+  padding-bottom:5px !important;
+  margin-bottom:3px !important;
+}
+#step5 .input-display,
+#step5 .sim-select{
+  height:32px !important;
+  min-height:32px !important;
+}
+#step5 .insurance-bar{
+  min-height:29px !important;
+  margin-top:2px !important;
+  padding-top:3px !important;
+  padding-bottom:3px !important;
+}
+#step5 .finance-top > div{
+  min-height:50px !important;
+  padding-top:4px !important;
+  padding-bottom:2px !important;
+}
+
+/* Resumen inferior: CAE completo debajo */
+#step5 .finance-bottom{
+  padding:4px 3px 5px !important;
+  font-size:12px !important;
+  line-height:1.28 !important;
+  text-align:center !important;
+  min-height:48px !important;
+  box-sizing:border-box !important;
+}
+#step5 .finance-bottom b{
+  font-size:12.5px !important;
+}
+
+/* Botones siempre visibles, largos y completos */
+#step5 .sim-actions{
+  flex:0 0 75px !important;
+  height:75px !important;
+  min-height:75px !important;
+  width:100% !important;
+  display:grid !important;
+  grid-template-rows:35px 35px !important;
+  gap:5px !important;
+  margin:0 !important;
+  padding:0 !important;
+  overflow:visible !important;
+}
+#step5 .sim-actions .new-btn{
+  width:100% !important;
+  height:35px !important;
+  min-height:35px !important;
+  line-height:35px !important;
+  margin:0 !important;
+}
+</style>
+
+<script id="step5-cae-own-line-final">
+(function(){
+  function fixCAE(){
+    var box=document.querySelector('#step5 .finance-bottom');
+    if(!box || box.dataset.caeFixed==='1') return;
+
+    /* Conserva los valores dinámicos existentes, solo cambia la distribución visual */
+    var first=document.getElementById('firstPaymentValue');
+    var total=document.getElementById('costoTotalTxt');
+    var cae=document.getElementById('caeValue');
+    if(!first || !total || !cae) return;
+
+    box.innerHTML =
+      '<div>Primer pago: <b id="firstPaymentValue">'+first.textContent+'</b></div>'+
+      '<div>Costo total: <b id="costoTotalTxt">'+total.textContent+'</b></div>'+
+      '<div>CAE: <b id="caeValue">'+cae.textContent+'</b></div>';
+    box.dataset.caeFixed='1';
+  }
+
+  var oldGo=window.go;
+  window.go=function(){
+    var r=typeof oldGo==='function' ? oldGo.apply(this,arguments) : undefined;
+    if(Number(arguments[0])===5) setTimeout(fixCAE,0);
+    return r;
+  };
+  setTimeout(fixCAE,0);
+})();
+</script>
+
+
+<!-- AJUSTE DEFINITIVO: STEP 5 DOS BOTONES + STEP 3 "Cuotas" -->
+<style id="final-step5-two-buttons-step3-capital">
+/* STEP 5: compactar lo mínimo para reservar espacio fijo a los DOS botones */
+#step5.active{
+  height:100% !important;
+  min-height:0 !important;
+  display:flex !important;
+  flex-direction:column !important;
+  overflow:hidden !important;
+}
+#step5 .new-progress{
+  flex:0 0 auto !important;
+  margin-bottom:2px !important;
+}
+#step5 .sim-form-card{
+  flex:1 1 auto !important;
+  min-height:0 !important;
+  padding:4px 6px !important;
+  margin:0 0 3px !important;
+}
+#step5 .sim-lbl{
+  margin-bottom:1px !important;
+  line-height:1 !important;
+}
+#step5 .sim-lbl[style]{
+  margin-top:4px !important;
+}
+#step5 .input-display,
+#step5 .sim-select{
+  height:30px !important;
+  min-height:30px !important;
+}
+#step5 .insurance-bar{
+  min-height:27px !important;
+  margin-top:2px !important;
+  padding-top:2px !important;
+  padding-bottom:2px !important;
+}
+#step5 .finance-top > div{
+  min-height:47px !important;
+  padding:3px 4px 2px !important;
+}
+#step5 .finance-bottom{
+  min-height:43px !important;
+  padding:3px 3px !important;
+  line-height:1.18 !important;
+}
+
+/* Bloque reservado: Continuar + Volver siempre completos */
+#step5 .sim-actions{
+  flex:0 0 73px !important;
+  height:73px !important;
+  min-height:73px !important;
+  width:100% !important;
+  display:flex !important;
+  flex-direction:column !important;
+  gap:3px !important;
+  margin:0 !important;
+  padding:0 !important;
+  overflow:visible !important;
+  position:relative !important;
+}
+#step5 .sim-actions .new-btn{
+  flex:0 0 35px !important;
+  display:block !important;
+  width:100% !important;
+  height:35px !important;
+  min-height:35px !important;
+  margin:0 !important;
+  padding:0 8px !important;
+  line-height:35px !important;
+  visibility:visible !important;
+  opacity:1 !important;
+}
+
+/* STEP 3: solo capitalización visual de "Cuotas" */
+#step3 .quota-option .q small{
+  text-transform:none !important;
+}
+</style>
+
+<script id="final-capital-cuotas-step3">
+(function(){
+  function capitalizarCuotas(){
+    document.querySelectorAll('#step3 .quota-option .q small').forEach(function(el){
+      if((el.textContent||'').trim().toLowerCase()==='cuotas'){
+        el.textContent='Cuotas';
+      }
+    });
+  }
+  capitalizarCuotas();
+  document.addEventListener('DOMContentLoaded',capitalizarCuotas);
+  var previousGo=window.go;
+  window.go=function(){
+    var r=typeof previousGo==='function' ? previousGo.apply(this,arguments) : undefined;
+    if(Number(arguments[0])===3) setTimeout(capitalizarCuotas,0);
+    return r;
+  };
+})();
+</script>
+
+
+<!-- AJUSTE DEFINITIVO CAE VISIBLE SIN SCROLL -->
+<style id="step5-cae-visible-no-overlap-final">
+/* Reducimos muy levemente tipografías/espacios superiores para liberar alto,
+   manteniendo los dos botones completos. */
+#step5 .sim-lbl{
+  font-size:10.5px !important;
+}
+#step5 .input-display,
+#step5 .sim-select{
+  height:29px !important;
+  min-height:29px !important;
+  font-size:11.5px !important;
+}
+#step5 .insurance-bar{
+  min-height:25px !important;
+  height:25px !important;
+  font-size:9px !important;
+  margin-top:2px !important;
+  padding:1px 5px !important;
+}
+#step5 .finance-top > div{
+  min-height:44px !important;
+  padding:2px 4px 1px !important;
+}
+#step5 .finance-top > div > span:first-child{
+  font-size:10px !important;
+  line-height:11px !important;
+  margin-bottom:2px !important;
+}
+#step5 #cuotaTxt,
+#step5 #rateNew{
+  font-size:20px !important;
+  line-height:22px !important;
+}
+#step5 .discount-chip{
+  margin-top:1px !important;
+}
+
+/* Resumen financiero: 3 líneas completas, incluida CAE */
+#step5 .finance-bottom{
+  min-height:52px !important;
+  height:52px !important;
+  padding:3px 3px 4px !important;
+  box-sizing:border-box !important;
+  font-size:11px !important;
+  line-height:14px !important;
+  overflow:visible !important;
+  position:relative !important;
+  z-index:2 !important;
+}
+#step5 .finance-bottom > div{
+  display:block !important;
+  height:14px !important;
+  line-height:14px !important;
+  margin:0 !important;
+  white-space:nowrap !important;
+}
+#step5 .finance-bottom b{
+  font-size:11.5px !important;
+  line-height:14px !important;
+}
+
+/* Un poco menos de espacio exterior del cuadro */
+#step5 .sim-form-card{
+  padding-top:3px !important;
+  padding-bottom:3px !important;
+  margin-bottom:2px !important;
+}
+
+/* Mantener ambos botones visibles y fuera del resumen */
+#step5 .sim-actions{
+  flex:0 0 73px !important;
+  height:73px !important;
+  min-height:73px !important;
+  position:relative !important;
+  z-index:1 !important;
+}
+</style>
+
+
+<!-- TERMINOS: UN SOLO CHECK DE SEGURO + NOTA LEGAL MAS GRANDE -->
+<style id="terms-single-insurance-final">
+#step16 #termCesantia,
+#step16 #termHospitalizacion{
+  display:none !important;
+}
+#step16 .legal-note{
+  font-size:10.5px !important;
+  line-height:1.35 !important;
+}
+</style>
+
+<script id="terms-single-insurance-final-script">
+(function(){
+  function byId(id){return document.getElementById(id);}
+
+  function selectedInsuranceNames(){
+    var names=['Seguro de desgravamen'];
+    if(window.data && data.segCesantia) names.push('Seguro de cesantía');
+    if(window.data && data.segHospitalizacion) names.push('Seguro de hospitalización');
+    return names;
+  }
+
+  function configureSingleInsuranceConsent(){
+    var step=byId('step16');
+    if(!step) return;
+
+    /* Siempre un único check de condiciones del seguro */
+    var insuranceCheck=byId('chkCondSeguro');
+    if(insuranceCheck){
+      var row=insuranceCheck.closest('label');
+      if(row){
+        var bold=row.querySelector('b');
+        var link=row.querySelector('a');
+        if(bold) bold.textContent='El cliente ha leído y aceptado las condiciones del seguro';
+        if(link){
+          link.textContent='Ver condiciones del seguro';
+          link.onclick=function(e){
+            e.preventDefault();
+            e.stopPropagation();
+            alert('Condiciones de los seguros contratados:\\n\\n• '+selectedInsuranceNames().join('\\n• '));
+          };
+        }
+      }
+    }
+
+    /* Las filas individuales no participan del consentimiento */
+    var ces=byId('termCesantia');
+    var hos=byId('termHospitalizacion');
+    if(ces) ces.style.display='none';
+    if(hos) hos.style.display='none';
+  }
+
+  /* Reemplaza validación: solo Avance + un único check de Seguro */
+  window.toggleConsentButton=function(){
+    var avance=byId('chkCondAvance');
+    var seguro=byId('chkCondSeguro');
+    var btn=byId('btnAcceptConditions');
+    if(btn) btn.disabled=!(avance && seguro && avance.checked && seguro.checked);
+  };
+
+  var previousGo=window.go;
+  window.go=function(){
+    var r=typeof previousGo==='function' ? previousGo.apply(this,arguments) : undefined;
+    if(Number(arguments[0])===16){
+      setTimeout(function(){
+        configureSingleInsuranceConsent();
+        window.toggleConsentButton();
+      },0);
+    }
+    return r;
+  };
+
+  setTimeout(configureSingleInsuranceConsent,0);
+})();
+</script>
+
+
+<!-- COMPROBANTE: CAE + AUTORIZACION RPASS -->
+<style id="receipt-cae-rpass-final">
+#step10 .rpass-proof{
+  margin-top:6px !important;
+  padding-top:6px !important;
+  border-top:1px dashed #6b2a8f !important;
+  text-align:center !important;
+  font-size:8px !important;
+  line-height:1.25 !important;
+  font-weight:700 !important;
+  text-transform:uppercase !important;
+}
+</style>
+
+<script id="receipt-cae-rpass-final-script">
+(function(){
+  function getCAE(){
+    var q=(window.data && Number(data.cuotas)) || 12;
+    if(q<=6) return '35,80%';
+    if(q<=12) return '34,10%';
+    if(q<=18) return '32,90%';
+    if(q<=24) return '31,60%';
+    if(q<=30) return '31,20%';
+    return '30,90%';
+  }
+
+  function patchReceiptCAEandRPASS(){
+    var receipt=document.querySelector('#step10 .receipt-new');
+    if(!receipt) return;
+
+    /* CAE debajo de la fecha de primera cuota y antes de ITE */
+    var cae=document.getElementById('ticketCAErow');
+    if(!cae){
+      var ite=Array.from(receipt.querySelectorAll('.rrow')).find(function(row){
+        var first=row.querySelector('span');
+        return first && first.textContent.trim()==='ITE';
+      });
+      cae=document.createElement('div');
+      cae.id='ticketCAErow';
+      cae.className='rrow';
+      cae.innerHTML='<span>CAE</span><span id="ticketCAE"></span>';
+      if(ite) receipt.insertBefore(cae,ite);
+    }
+    var caeValue=document.getElementById('ticketCAE');
+    if(caeValue) caeValue.textContent=getCAE();
+
+    /* Confirmación de autorización debajo del texto legal existente */
+    if(!document.getElementById('receiptRpassProof')){
+      var legal=receipt.querySelector('.legal');
+      if(legal){
+        var proof=document.createElement('div');
+        proof.id='receiptRpassProof';
+        proof.className='rpass-proof';
+        proof.textContent='TRANSACCIÓN AUTORIZADA CON RPASS';
+        legal.insertAdjacentElement('afterend',proof);
+      }
+    }
+  }
+
+  var oldGo=window.go;
+  window.go=function(){
+    var r=typeof oldGo==='function' ? oldGo.apply(this,arguments) : undefined;
+    if(Number(arguments[0])===10) setTimeout(patchReceiptCAEandRPASS,0);
+    return r;
+  };
+  setTimeout(patchReceiptCAEandRPASS,0);
+})();
+</script>
+
+
+<!-- SIMULAR OTRO MONTO: ENTRAR CON MONTO Y CUOTAS VACIOS -->
+<script id="simular-otro-monto-empty-final">
+(function(){
+  function prepareCustomSimulation(){
+    if(window.data){
+      data.monto='';
+      data.cuotas='';
+    }
+
+    /* Limpia también seguros opcionales para una simulación nueva */
+    var ces=document.getElementById('segCesantia');
+    var hos=document.getElementById('segHospitalizacion');
+    if(ces) ces.checked=false;
+    if(hos) hos.checked=false;
+    if(window.data){
+      data.segCesantia=false;
+      data.segHospitalizacion=false;
+    }
+
+    /* Entra al simulador */
+    if(typeof window.go==='function') window.go(5);
+
+    /* Refuerzo visual después de construir/renderizar STEP 5 */
+    setTimeout(function(){
+      if(window.data){
+        data.monto='';
+        data.cuotas='';
+      }
+      var monto=document.getElementById('montoTxt');
+      var cuotas=document.getElementById('cuotasSelectNew');
+      if(monto) monto.textContent='Ingresa monto';
+      if(cuotas) cuotas.textContent='Selecciona cuotas';
+
+      var finance=document.querySelector('#step5 .finance-box');
+      if(finance) finance.classList.add('no-simulation');
+
+      ['cuotaTxt','rateNew','costoTotalTxt','firstPaymentValue','caeValue'].forEach(function(id){
+        var el=document.getElementById(id);
+        if(el) el.textContent='';
+      });
+
+      var btn=document.getElementById('continueSimBtn');
+      if(btn) btn.disabled=true;
+    },0);
+  }
+
+  function patchButton(){
+    var btn=document.querySelector('#step3 .offer-actions .primary');
+    if(!btn) return;
+    btn.onclick=function(e){
+      if(e){e.preventDefault();e.stopPropagation();}
+      prepareCustomSimulation();
+    };
+  }
+
+  patchButton();
+  document.addEventListener('DOMContentLoaded',patchButton);
+
+  var oldGo=window.go;
+  window.go=function(){
+    var r=typeof oldGo==='function' ? oldGo.apply(this,arguments) : undefined;
+    if(Number(arguments[0])===3) setTimeout(patchButton,0);
+    return r;
+  };
+})();
+</script>
+
+
+<!-- FLUJO FINAL MENU OFERTAS: VOLVER A NUEVO RUT -->
+<script id="final-menu-ofertas-volver-nuevo-rut">
+(function(){
+  function resetAndOpenNewRut(){
+    /* Nueva operación desde Ofertas Banco Ripley */
+    window.origenOferta='menu';
+
+    if(window.data){
+      data.rutCliente='';
+      data.monto='';
+      data.cuotas='';
+      data.segCesantia=false;
+      data.segHospitalizacion=false;
+    }
+
+    /* Limpiar visualmente estados que no deben heredarse */
+    var idsChecks=['segCesantia','segHospitalizacion','chkCondAvance','chkCondSeguro',
+                   'chkCondCesantia','chkCondHospitalizacion'];
+    idsChecks.forEach(function(id){
+      var e=document.getElementById(id);
+      if(e && 'checked' in e) e.checked=false;
+    });
+
+    if(typeof window.abrirOfertasBancoRipleyDesdeMenu==='function'){
+      window.abrirOfertasBancoRipleyDesdeMenu();
+    }else if(typeof window.go==='function'){
+      window.go(19);
+    }
+
+    setTimeout(function(){
+      var txt=document.getElementById('rutClienteMenuTxt');
+      if(txt){
+        txt.textContent='RUT cliente';
+        txt.className='placeholder';
+      }
+      var btn=document.getElementById('btnClienteMenu');
+      if(btn) btn.disabled=true;
+      var kp=document.getElementById('keypad19');
+      if(kp) kp.classList.add('keyboard-hidden');
+      var title=document.getElementById('barTitle');
+      if(title) title.textContent='Ofertas Banco Ripley';
+      var main=document.getElementById('mainContent');
+      if(main) main.scrollTop=0;
+    },0);
+  }
+
+  function syncFinalButton(){
+    var btn=document.querySelector('#step12 .final-new .new-btn.primary');
+    if(!btn) return;
+
+    if(window.origenOferta==='menu'){
+      btn.textContent='Volver';
+      btn.setAttribute('aria-label','Volver');
+      btn.onclick=function(e){
+        if(e){e.preventDefault();e.stopPropagation();}
+        resetAndOpenNewRut();
+        return false;
+      };
+    }
+  }
+
+  var oldGo=window.go;
+  window.go=function(){
+    var r=typeof oldGo==='function' ? oldGo.apply(this,arguments) : undefined;
+    if(Number(arguments[0])===12) setTimeout(syncFinalButton,0);
+    return r;
+  };
+
+  window.volverNuevoRutOfertas=resetAndOpenNewRut;
+  setTimeout(syncFinalButton,0);
+})();
+</script>
